@@ -4,16 +4,16 @@ FROM ghcr.io/linuxserver/baseimage-alpine-nginx:3.23
 
 # set version label
 ARG BUILD_DATE
-ARG VERSION
-ARG GROCY_RELEASE
-LABEL build_version="Linuxserver.io version:- ${VERSION} Build-date:- ${BUILD_DATE}"
-LABEL maintainer="alex-phillips, homerr"
+ARG VERSION="hobby"
+LABEL build_version="Grocy Fork: RaphaelRoumat/grocy-hobby - Build-date:- ${BUILD_DATE}"
+LABEL maintainer="Raphael Roumat"
 
 RUN \
   echo "**** install build packages ****" && \
   apk add --no-cache --virtual=build-dependencies \
     git \
-    yarn && \
+    yarn \
+    curl && \
   echo "**** install runtime packages ****" && \
   apk add --no-cache \
     php85-gd \
@@ -22,37 +22,30 @@ RUN \
     php85-pdo \
     php85-pdo_sqlite \
     php85-tokenizer && \
+  echo "**** install composer ****" && \
+  curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/bin --filename=composer && \
   echo "**** configure php-fpm to pass env vars ****" && \
   sed -E -i 's/^;?clear_env ?=.*$/clear_env = no/g' /etc/php85/php-fpm.d/www.conf && \
   grep -qxF 'clear_env = no' /etc/php85/php-fpm.d/www.conf || echo 'clear_env = no' >> /etc/php85/php-fpm.d/www.conf && \
-  echo "**** install grocy ****" && \
+  echo "**** install grocy from custom fork ****" && \
   mkdir -p /app/www && \
-  if [ -z ${GROCY_RELEASE+x} ]; then \
-    GROCY_RELEASE=$(curl -sX GET "https://api.github.com/repos/grocy/grocy/releases/latest" \
-    | awk '/tag_name/{print $4;exit}' FS='[""]'); \
-  fi && \
-  curl -o \
-    /tmp/grocy.tar.gz -L \
-    "https://github.com/grocy/grocy/archive/${GROCY_RELEASE}.tar.gz" && \
-  tar xf \
-    /tmp/grocy.tar.gz -C \
-    /app/www/ --strip-components=1 && \
-  cp -R /app/www/data/plugins \
-    /defaults/plugins && \
+  git clone https://github.com/RaphaelRoumat/grocy-hobby.git /app/www && \
+  cp -R /app/www/data/plugins /defaults/plugins && \
   echo "**** install composer packages ****" && \
   composer install -d /app/www --no-dev && \
   echo "**** install yarn packages ****" && \
   cd /app/www && \
-  yarn --production && \
+  yarn install --production && \
   yarn cache clean && \
-  printf "Linuxserver.io version: ${VERSION}\nBuild-date: ${BUILD_DATE}" > /build_version && \
+  printf "Custom Fork version: ${VERSION}\nBuild-date: ${BUILD_DATE}" > /build_version && \
   echo "**** cleanup ****" && \
   apk del --purge \
     build-dependencies && \
   rm -rf \
+    /usr/bin/composer \
     /tmp/* \
-    $HOME/.cache \
-    $HOME/.composer
+    /root/.cache \
+    /root/.composer
 
 # copy local files
 COPY root/ /
